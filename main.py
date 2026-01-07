@@ -200,9 +200,8 @@ def start_bot():
     return f"<body style='background:#000;color:#ffcc00;text-align:center;padding-top:100px;'><h1>🚀 Bot '{data['bot_name']}' is now Live!</h1><p>Check Telegram.</p><a href='/' style='color:#fff;'>Back to Home</a></body>"
 
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8000))
-    # Threading
+if name == " main ": 
+    port = int(os.environ.get("PORT",10000))
     app.run(host='0.0.0.0', port=port)
     
                      
