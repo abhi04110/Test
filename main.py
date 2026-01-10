@@ -1,7 +1,7 @@
 import os
 import time
 import threading
-from flask import Flask, render_template_string, request
+from flask import Flask, render_template_string, request, jsonify
 import telebot
 from groq import Groq
 
@@ -11,11 +11,12 @@ app = Flask(__name__)
 GROQ_KEY = os.getenv("GROQ_API_KEY")
 client = Groq(api_key=GROQ_KEY)
 
-# Data storage (Restart hone par wipe ho jayega, Render limit)
+# Data storage
 chat_memory = {}
-bot_rules = {} 
+bot_rules = {}
+active_bots = {}
 
-# --- CSS & HTML INTERFACE (Black & Yellow Theme) ---
+# --- CSS & HTML INTERFACE (Improved Black & Yellow Theme) ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
@@ -23,78 +24,319 @@ HTML_TEMPLATE = """
     <title>🔱 TECHY ABHI | Bot Engine</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body { 
-            background-color: #000000; 
-            color: #ffcc00; 
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
-            margin: 0; padding: 0;
-            display: flex; justify-content: center; align-items: center; min-height: 100vh;
-        }
-        .container { 
-            background: #0f0f0f;
-            border: 3px solid #ffcc00; 
-            border-radius: 20px; 
-            width: 90%; max-width: 800px; 
-            padding: 40px; 
-            box-shadow: 0 0 30px rgba(255, 204, 0, 0.2);
-            margin: 20px;
-        }
-        h1 { font-size: 3rem; color: #ffcc00; text-shadow: 2px 2px 10px rgba(255, 204, 0, 0.5); margin-bottom: 5px; }
-        p { font-size: 1.2rem; color: #ffffff; margin-bottom: 30px; }
-        
-        input, select, textarea { 
-            width: 100%; padding: 15px; margin: 15px 0; 
-            border-radius: 10px; border: 1px solid #ffcc00; 
-            background: #1a1a1a; color: #fff; font-size: 1.1rem;
+        * {
+            margin: 0;
+            padding: 0;
             box-sizing: border-box;
         }
-        textarea { height: 120px; resize: vertical; }
+        
+        body { 
+            background: linear-gradient(135deg, #000000 0%, #1a1a1a 100%);
+            color: #ffcc00; 
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; 
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .container { 
+            background: rgba(15, 15, 15, 0.95);
+            border: 2px solid #ffcc00;
+            border-radius: 16px;
+            width: 100%;
+            max-width: 700px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(255, 204, 0, 0.15);
+            backdrop-filter: blur(10px);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #ffcc00, #ff9900, #ffcc00);
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid rgba(255, 204, 0, 0.2);
+        }
+        
+        h1 { 
+            font-size: 2.5rem; 
+            color: #ffcc00; 
+            margin-bottom: 10px;
+            text-shadow: 0 2px 10px rgba(255, 204, 0, 0.3);
+            letter-spacing: 1px;
+        }
+        
+        .tagline {
+            font-size: 1.1rem;
+            color: #cccccc;
+            margin-bottom: 5px;
+        }
+        
+        .subtitle {
+            font-size: 0.9rem;
+            color: #888888;
+            margin-bottom: 25px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #ffcc00;
+            font-size: 0.95rem;
+        }
+        
+        input, select, textarea { 
+            width: 100%; 
+            padding: 14px; 
+            border-radius: 10px; 
+            border: 1px solid rgba(255, 204, 0, 0.3); 
+            background: rgba(26, 26, 26, 0.8); 
+            color: #ffffff; 
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+        
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #ffcc00;
+            box-shadow: 0 0 0 2px rgba(255, 204, 0, 0.1);
+        }
+        
+        textarea { 
+            height: 100px; 
+            resize: vertical; 
+            line-height: 1.5;
+        }
+        
+        .btn-container {
+            margin-top: 30px;
+        }
         
         .btn { 
-            background: #ffcc00; color: #000; 
-            padding: 18px 30px; border: none; border-radius: 12px; 
-            cursor: pointer; font-weight: bold; font-size: 1.3rem;
-            width: 100%; transition: 0.3s; margin-top: 10px;
+            background: linear-gradient(135deg, #ffcc00 0%, #e6b800 100%);
+            color: #000000; 
+            padding: 16px 30px; 
+            border: none; 
+            border-radius: 10px; 
+            cursor: pointer; 
+            font-weight: 700;
+            font-size: 1.1rem;
+            width: 100%;
+            transition: all 0.3s ease;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
         }
-        .btn:hover { background: #e6b800; transform: scale(1.02); }
+        
+        .btn:hover { 
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 204, 0, 0.3);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
         
         .tg-btn { 
-            background: transparent; color: #ffcc00; 
-            border: 2px solid #ffcc00; margin-top: 20px; 
+            background: transparent; 
+            color: #ffcc00;
+            border: 2px solid #ffcc00;
+            margin-top: 15px;
+            padding: 14px;
         }
-
-        .footer { margin-top: 30px; font-size: 1rem; color: #666; }
-        .dev { color: #ffcc00; font-weight: bold; text-decoration: none; }
+        
+        .tg-btn:hover {
+            background: rgba(255, 204, 0, 0.1);
+        }
+        
+        .status {
+            text-align: center;
+            padding: 15px;
+            margin: 20px 0;
+            background: rgba(255, 204, 0, 0.1);
+            border-radius: 10px;
+            border-left: 4px solid #ffcc00;
+            display: none;
+        }
+        
+        .status.active {
+            display: block;
+            animation: fadeIn 0.5s ease;
+        }
+        
+        .footer { 
+            margin-top: 30px; 
+            text-align: center; 
+            padding-top: 20px;
+            border-top: 1px solid rgba(255, 204, 0, 0.2);
+            color: #666666; 
+            font-size: 0.9rem;
+        }
+        
+        .dev { 
+            color: #ffcc00; 
+            font-weight: bold; 
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+        
+        .dev:hover {
+            color: #ffffff;
+            text-decoration: underline;
+        }
+        
+        .credit {
+            font-size: 0.8rem;
+            margin-top: 10px;
+            color: #555555;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+                margin: 10px;
+            }
+            
+            h1 {
+                font-size: 2rem;
+            }
+            
+            .btn {
+                padding: 14px 20px;
+                font-size: 1rem;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            body {
+                padding: 10px;
+            }
+            
+            .container {
+                padding: 15px;
+            }
+            
+            h1 {
+                font-size: 1.8rem;
+            }
+            
+            input, select, textarea {
+                padding: 12px;
+            }
+        }
     </style>
+    <script>
+        function showLoading() {
+            const status = document.getElementById('status');
+            const btn = document.querySelector('.btn');
+            status.textContent = '🚀 Bot is being activated... Please wait!';
+            status.classList.add('active');
+            btn.disabled = true;
+            btn.innerHTML = '⚡ ACTIVATING...';
+            return true;
+        }
+        
+        function copyToken() {
+            const tokenField = document.querySelector('input[name="token"]');
+            tokenField.select();
+            document.execCommand('copy');
+            alert('Token copied to clipboard!');
+        }
+    </script>
 </head>
 <body>
     <div class="container">
-        <h1>🔱 TECHY ABHI</h1>
-        <p>Advance Multi-Bot Deployment System</p>
+        <div class="header">
+            <h1>🔱 TECHY ABHI</h1>
+            <div class="tagline">Advanced Multi-Bot Deployment System</div>
+            <div class="subtitle">Create AI-powered Telegram bots in seconds</div>
+        </div>
         
-        <form method="POST" action="/start_bot">
-            <input type="text" name="token" placeholder="Enter Telegram Bot Token" required>
-            <input type="text" name="admin_id" placeholder="Your Admin Telegram ID (Numeric)" required>
-            <input type="text" name="bot_name" placeholder="Bot Display Name (e.g. Nezuko)" required>
-            <input type="text" name="dev_name" placeholder="Developer Name (Owner Name)" required>
+        <div id="status" class="status"></div>
+        
+        <form method="POST" action="/start_bot" onsubmit="return showLoading()">
+            <div class="form-group">
+                <label for="token">🤖 Telegram Bot Token</label>
+                <input type="text" id="token" name="token" placeholder="Enter bot token from @BotFather" required>
+            </div>
             
-            <select name="gender">
-                <option value="Male">Male (Larka Personality)</option>
-                <option value="Female">Female (Larki Personality)</option>
-            </select>
+            <div class="form-group">
+                <label for="admin_id">👑 Admin Telegram ID</label>
+                <input type="text" id="admin_id" name="admin_id" placeholder="Your numeric Telegram ID" required>
+            </div>
             
-            <textarea name="behavior" placeholder="Behavior: (e.g. Talk like a friendly Indian girl, use emojis, be a bit funny)"></textarea>
-            <textarea name="rules" placeholder="Group Rules: (Write rules here, users can see them via /rules command)"></textarea>
+            <div class="form-group">
+                <label for="bot_name">📛 Bot Display Name</label>
+                <input type="text" id="bot_name" name="bot_name" placeholder="e.g., Nezuko, Chhota Bheem" required>
+            </div>
             
-            <button type="submit" class="btn">⚡ ACTIVATE GOD MODE</button>
+            <div class="form-group">
+                <label for="dev_name">💻 Developer Name</label>
+                <input type="text" id="dev_name" name="dev_name" placeholder="Owner/Developer Name" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="gender">⚤ Gender & Personality</label>
+                <select id="gender" name="gender" required>
+                    <option value="Male">Male Personality (Ladka Style)</option>
+                    <option value="Female">Female Personality (Ladki Style)</option>
+                    <option value="Friendly">Friendly & Casual</option>
+                    <option value="Professional">Professional Style</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="behavior">🎭 Behavior & Style</label>
+                <textarea id="behavior" name="behavior" placeholder="Describe bot's personality. Example: Friendly Indian girl who loves chatting, uses emojis 😊, speaks Hinglish, and is helpful"></textarea>
+            </div>
+            
+            <div class="form-group">
+                <label for="rules">📜 Group Rules (Optional)</label>
+                <textarea id="rules" name="rules" placeholder="Rules for group members to follow. Users can see them via /rules command"></textarea>
+            </div>
+            
+            <div class="btn-container">
+                <button type="submit" class="btn">
+                    <span>⚡</span> ACTIVATE GOD MODE
+                </button>
+            </div>
         </form>
-
+        
         <a href="https://t.me/abhi0w0" target="_blank">
-            <button class="btn tg-btn">JOIN TELEGRAM: @abhi0w0</button>
+            <button class="btn tg-btn">
+                <span>📢</span> JOIN TELEGRAM CHANNEL
+            </button>
         </a>
-
+        
         <div class="footer">
-            Developed by <a href="https://t.me/a6h1ii" class="dev">Abhi</a> | 2026 🔱 TECHY ABHI Engine
+            <p>Developed with ❤️ by <a href="https://t.me/a6h1ii" class="dev" target="_blank">Abhi</a></p>
+            <p class="credit">© 2026 🔱 TECHY ABHI Engine | All Rights Reserved</p>
+            <p class="credit">Powered by Groq AI & Flask</p>
         </div>
     </div>
 </body>
@@ -103,87 +345,166 @@ HTML_TEMPLATE = """
 
 # --- BOT ENGINE ---
 def start_telegram_bot(token, admin_id, bot_name, dev_name, gender, behavior, rules_text):
-    bot = telebot.TeleBot(token)
-    spam_status = {}
-    bot_rules[token] = rules_text if rules_text else "No rules defined by admin."
-
-    def get_ai_response(user_id, user_text):
-        if user_id not in chat_memory: chat_memory[user_id] = []
-        chat_memory[user_id].append({"role": "user", "content": user_text})
-        if len(chat_memory[user_id]) > 20: chat_memory[user_id].pop(0)
-
-        system_prompt = f"Name: {bot_name}. Dev: {dev_name}. Gender: {gender}. Character: {behavior}. " \
-                        f"Strictly talk in Hinglish. Behave like a human, use casual language and emojis."
+    """Start Telegram bot with given configuration"""
+    try:
+        bot = telebot.TeleBot(token)
+        bot_info = bot.get_me()
+        bot_rules[token] = rules_text if rules_text else "No rules defined by admin."
         
-        messages = [{"role": "system", "content": system_prompt}] + chat_memory[user_id]
+        # Store active bot info
+        active_bots[token] = {
+            'name': bot_name,
+            'status': 'running',
+            'started_at': time.time(),
+            'bot_username': bot_info.username
+        }
         
-        try:
-            completion = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=messages)
-            ai_msg = completion.choices[0].message.content
-            chat_memory[user_id].append({"role": "assistant", "content": ai_msg})
-            return ai_msg
-        except: return "Arey yaar, dimag thak gaya mera. Thodi der baad baat karte hain!"
+        def get_ai_response(user_id, user_text):
+            """Get AI response from Groq"""
+            if user_id not in chat_memory:
+                chat_memory[user_id] = []
+            
+            chat_memory[user_id].append({"role": "user", "content": user_text})
+            
+            # Keep only last 15 messages
+            if len(chat_memory[user_id]) > 15:
+                chat_memory[user_id] = chat_memory[user_id][-15:]
+            
+            # Enhanced system prompt
+            gender_map = {
+                "Male": "Ladke ki tarah baat karein. Casual and friendly.",
+                "Female": "Ladki ki tarah baat karein. Sweet and caring.",
+                "Friendly": "Very friendly and casual. Use lots of emojis.",
+                "Professional": "Professional but friendly tone."
+            }
+            
+            gender_desc = gender_map.get(gender, "Friendly and casual")
+            
+            system_prompt = f"""You are {bot_name}, created by {dev_name}.
+Gender Style: {gender_desc}
+Behavior: {behavior}
+Language: Use Hinglish (Hindi+English mix) naturally. Use emojis appropriately.
+Be human-like, friendly, and engaging. Keep responses concise (2-3 lines max)."""
+            
+            messages = [{"role": "system", "content": system_prompt}] + chat_memory[user_id]
+            
+            try:
+                completion = client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=messages,
+                    temperature=0.7,
+                    max_tokens=150
+                )
+                ai_msg = completion.choices[0].message.content
+                chat_memory[user_id].append({"role": "assistant", "content": ai_msg})
+                return ai_msg
+            except Exception as e:
+                print(f"AI Error: {e}")
+                return "Arey yaar, thoda technical issue aa gaya! Thodi der baad try karna 😅"
 
-    # --- COMMAND HANDLERS ---
-    @bot.message_handler(commands=['help'])
-    def help_cmd(m):
-        bot.reply_to(m, "🔱 *GOD MODE COMMANDS* ⚡\n\n"
-                        "🔹 /help - List all commands\n"
-                        "🔹 /rules - Show group rules\n"
-                        "🔹 /kick - Kick a member (Admin)\n"
-                        "🔹 /mute - Mute a member (Admin)\n"
-                        "🔹 /unmute - Unmute (Admin)\n"
-                        "🔹 /spam [text] - High speed spam (Admin)\n"
-                        "🔹 /stop - Stop any active spam\n"
-                        "🔹 /clear - Reset bot memory\n"
-                        "🔹 /me - Dev & Bot Info\n"
-                        "🔹 /del - Delete replied message", parse_mode="Markdown")
+        # --- COMMAND HANDLERS ---
+        @bot.message_handler(commands=['start', 'help'])
+        def help_cmd(m):
+            help_text = f"""🤖 *{bot_name} - GOD MODE* ⚡
 
-    @bot.message_handler(commands=['rules'])
-    def show_rules(m):
-        bot.reply_to(m, f"📋 *GROUP RULES*:\n\n{bot_rules[token]}", parse_mode="Markdown")
+*Basic Commands:*
+🔹 /start - Welcome message
+🔹 /help - All commands list
+🔹 /rules - Group rules
+🔹 /me - Bot info
+🔹 /clear - Clear chat memory
 
-    @bot.message_handler(commands=['kick'])
-    def kick_user(m):
-        if str(m.from_user.id) == admin_id:
-            if m.reply_to_message:
-                bot.ban_chat_member(m.chat.id, m.reply_to_message.from_user.id)
-                bot.reply_to(m, "Uda diya! 🚀 Ta-ta Bye-bye!")
-        else: bot.reply_to(m, "Aap admin nahi ho, aukat mein rahein! 🤫")
+*Admin Commands:* (Admin Only)
+🔸 /kick [reply] - Remove user
+🔸 /mute [reply] - Mute user
+🔸 /unmute [reply] - Unmute user
+🔸 /spam [text] - Spam messages
+🔸 /stop - Stop spam
+🔸 /del [reply] - Delete message
 
-    @bot.message_handler(commands=['spam'])
-    def start_spam(m):
-        if str(m.from_user.id) == admin_id:
-            text = m.text.replace("/spam", "").strip()
-            if not text: return bot.reply_to(m, "Spam ke liye kuch text to do!")
-            spam_status[m.chat.id] = True
-            bot.send_message(m.chat.id, "Spamming Started... 😈")
-            while spam_status.get(m.chat.id):
-                bot.send_message(m.chat.id, text)
-                time.sleep(0.5)
-        else: bot.reply_to(m, "Nahi beta, spam sirf Admin karega.")
+*Note:* Just chat normally for AI conversation!"""
+            bot.reply_to(m, help_text, parse_mode="Markdown")
 
-    @bot.message_handler(commands=['stop'])
-    def stop_all(m):
-        spam_status[m.chat.id] = False
-        bot.reply_to(m, "Sab rok diya gaya hai. ✅")
+        @bot.message_handler(commands=['start'])
+        def welcome_cmd(m):
+            welcome_msg = f"""Namaste! 🙏
 
-    @bot.message_handler(commands=['me'])
-    def about_me(m):
-        bot.reply_to(m, f"🤖 *Bot Name*: {bot_name}\n👑 *Creator*: {dev_name}\n⚡ *Powered By*: @a6h1ii", parse_mode="Markdown")
+I'm *{bot_name}*, your friendly AI assistant!
+Created by *{dev_name}* ✨
 
-    @bot.message_handler(commands=['del'])
-    def delete_msg(m):
-        if str(m.from_user.id) == admin_id and m.reply_to_message:
-            bot.delete_message(m.chat.id, m.reply_to_message.message_id)
+Type /help to see all commands.
+Or just start chatting with me! 😊"""
+            bot.reply_to(m, welcome_msg, parse_mode="Markdown")
 
-    @bot.message_handler(func=lambda m: True)
-    def ai_chat(m):
-        if m.chat.type != "private" and f"@{bot.get_me().username}" not in m.text: return
-        response = get_ai_response(m.from_user.id, m.text)
-        bot.reply_to(m, response)
+        @bot.message_handler(commands=['rules'])
+        def show_rules(m):
+            bot.reply_to(m, f"📜 *{bot_name}'s Rules*:\n\n{bot_rules[token]}", parse_mode="Markdown")
 
-    bot.polling(none_stop=True)
+        @bot.message_handler(commands=['me'])
+        def about_me(m):
+            bot_info_text = f"""🤖 *Bot Information*:
+
+*Name:* {bot_name}
+*Creator:* {dev_name}
+*Gender Mode:* {gender}
+*Status:* 🟢 Active
+*Username:* @{bot_info.username}
+*Powered By:* @a6h1ii"""
+            bot.reply_to(m, bot_info_text, parse_mode="Markdown")
+
+        @bot.message_handler(commands=['kick'])
+        def kick_user(m):
+            if str(m.from_user.id) == admin_id:
+                if m.reply_to_message:
+                    try:
+                        bot.ban_chat_member(m.chat.id, m.reply_to_message.from_user.id)
+                        bot.unban_chat_member(m.chat.id, m.reply_to_message.from_user.id)
+                        bot.reply_to(m, "Uda diya gaya! 👋 Goodbye!")
+                    except:
+                        bot.reply_to(m, "Cannot kick this user.")
+                else:
+                    bot.reply_to(m, "Please reply to a user's message to kick.")
+            else:
+                bot.reply_to(m, "⚠️ Admin command only!")
+
+        @bot.message_handler(commands=['clear'])
+        def clear_memory(m):
+            if m.from_user.id in chat_memory:
+                chat_memory[m.from_user.id] = []
+                bot.reply_to(m, "Memory cleared! 🧹 Fresh start!")
+            else:
+                bot.reply_to(m, "No memory to clear!")
+
+        @bot.message_handler(func=lambda m: True)
+        def ai_chat(m):
+            """Handle all messages"""
+            # Ignore commands
+            if m.text.startswith('/'):
+                return
+            
+            # In groups, only respond when mentioned
+            if m.chat.type != "private":
+                if bot_info.username and f"@{bot_info.username}" not in m.text:
+                    return
+            
+            # Typing action
+            bot.send_chat_action(m.chat.id, 'typing')
+            
+            # Get AI response
+            response = get_ai_response(m.from_user.id, m.text)
+            
+            # Send response
+            bot.reply_to(m, response)
+
+        # Start bot
+        print(f"🤖 Starting bot: {bot_name}")
+        bot.polling(none_stop=True, timeout=60)
+        
+    except Exception as e:
+        print(f"❌ Bot startup failed: {e}")
+        if token in active_bots:
+            active_bots[token]['status'] = 'failed'
+            active_bots[token]['error'] = str(e)
 
 # --- FLASK ROUTES ---
 @app.route('/')
@@ -192,19 +513,127 @@ def index():
 
 @app.route('/start_bot', methods=['POST'])
 def start_bot():
-    data = request.form
-    threading.Thread(target=start_telegram_bot, args=(
-        data['token'], data['admin_id'], data['bot_name'], 
-        data['dev_name'], data['gender'], data['behavior'], data['rules']
-    )).start()
-    return f"<body style='background:#000;color:#ffcc00;text-align:center;padding-top:100px;'><h1>🚀 Bot '{data['bot_name']}' is now Live!</h1><p>Check Telegram.</p><a href='/' style='color:#fff;'>Back to Home</a></body>"
+    """Start bot endpoint"""
+    try:
+        data = request.form
+        
+        # Validate inputs
+        if not all([data['token'], data['admin_id'], data['bot_name'], data['dev_name']]):
+            return jsonify({'error': 'All fields are required'}), 400
+        
+        # Start bot in separate thread
+        thread = threading.Thread(
+            target=start_telegram_bot,
+            args=(
+                data['token'].strip(),
+                data['admin_id'].strip(),
+                data['bot_name'].strip(),
+                data['dev_name'].strip(),
+                data['gender'],
+                data['behavior'].strip(),
+                data.get('rules', '').strip()
+            ),
+            daemon=True
+        )
+        thread.start()
+        
+        # Success response
+        success_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Bot Activated!</title>
+            <style>
+                body {{
+                    background: #000;
+                    color: #ffcc00;
+                    font-family: Arial, sans-serif;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    min-height: 100vh;
+                    margin: 0;
+                    padding: 20px;
+                }}
+                .container {{
+                    text-align: center;
+                    background: rgba(15, 15, 15, 0.95);
+                    padding: 40px;
+                    border-radius: 20px;
+                    border: 2px solid #ffcc00;
+                    max-width: 600px;
+                }}
+                h1 {{
+                    color: #ffcc00;
+                    margin-bottom: 20px;
+                }}
+                .success-icon {{
+                    font-size: 4rem;
+                    margin-bottom: 20px;
+                }}
+                .btn {{
+                    background: #ffcc00;
+                    color: #000;
+                    padding: 12px 30px;
+                    border: none;
+                    border-radius: 10px;
+                    text-decoration: none;
+                    display: inline-block;
+                    margin-top: 20px;
+                    font-weight: bold;
+                    cursor: pointer;
+                }}
+                .info {{
+                    background: rgba(255, 204, 0, 0.1);
+                    padding: 15px;
+                    border-radius: 10px;
+                    margin: 20px 0;
+                    text-align: left;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="success-icon">✅</div>
+                <h1>🚀 Bot Activated Successfully!</h1>
+                <div class="info">
+                    <p><strong>🤖 Bot Name:</strong> {data['bot_name']}</p>
+                    <p><strong>👑 Developer:</strong> {data['dev_name']}</p>
+                    <p><strong>⚤ Personality:</strong> {data['gender']}</p>
+                    <p><strong>⏱ Status:</strong> 🟢 Running</p>
+                </div>
+                <p>Your bot is now live on Telegram! Go to Telegram and start chatting.</p>
+                <p><em>Note: It may take 10-15 seconds to fully initialize.</em></p>
+                <a href="/" class="btn">← Create Another Bot</a>
+            </div>
+        </body>
+        </html>
+        """
+        
+        return success_html
+        
+    except Exception as e:
+        error_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <body style="background:#000;color:#ffcc00;text-align:center;padding:100px 20px;">
+            <h1>❌ Error Occurred</h1>
+            <p>{str(e)}</p>
+            <a href="/" style="color:#ffcc00;">← Go Back</a>
+        </body>
+        </html>
+        """
+        return error_html
 
+@app.route('/health')
+def health():
+    """Health check endpoint for Render"""
+    return jsonify({
+        'status': 'ok',
+        'service': 'Techy Abhi Bot Engine',
+        'active_bots': len(active_bots)
+    })
 
 if __name__ == "__main__":
-
     port = int(os.environ.get("PORT", 10000))
-    # '0.0.0.0' 
-    app.run(host='0.0.0.0', port=port)
-    
-    
-                     
+    app.run(host='0.0.0.0', port=port, debug=False)
