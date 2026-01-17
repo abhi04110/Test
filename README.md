@@ -152,8 +152,8 @@ DEBUG=False
 Bot Setup Steps
 
 <div align="center">
-  <img src="https://raw.githubusercontent.com/abhi04110/TECHY-ABHI-Bot-Engine/main/assets/setup-steps.png" width="600">
-</div>
+  TECHY-ABHI-Bot-Engine
+</div> 
 
 1. Get Telegram Bot Token from @BotFather
 2. Get Your Telegram ID from @userinfobot
@@ -358,7 +358,7 @@ SOFTWARE.
 
 ---
 
-<h3>Made with ❤️ by <a href="https://t.me/a6h1ii">Abhishek Saini</a></h3>
+<h3>Made with ❤️ by <a href="https://t.me/a6h1ii">TECHY ABHI</a></h3>
 
 <p>
   <img src="https://img.shields.io/badge/🚀-Deploy_Your_Bot_Today-ffcc00?style=for-the-badge" alt="Deploy">
