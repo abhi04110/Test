@@ -1,10 +1,9 @@
 <div align="center">
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/abhi04110/TECHY-ABHI-Bot-Engine/main/assets/banner-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/abhi04110/TECHY-ABHI-Bot-Engine/main/assets/banner-light.png">
-  <img alt="TECHY ABHI Banner" src="https://raw.githubusercontent.com/abhi04110/TECHY-ABHI-Bot-Engine/main/assets/banner.png" width="100%">
-</picture>
+<!-- Main Banner -->
+
+
+🔱 TECHY ABHI 🔱
 
 <h3>⚡ Advanced AI-Powered Telegram Bot Deployment System</h3>
 
