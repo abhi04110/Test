@@ -3,7 +3,7 @@
 <!-- Main Banner -->
 
 
-🔱 TECHY ABHI 🔱
+<h2>🔱 TECHY ABHI 🔱</h2>
 
 <h3>⚡ Advanced AI-Powered Telegram Bot Deployment System</h3>
 
